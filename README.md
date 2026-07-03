@@ -5,7 +5,6 @@ EcoFriend is an AI-powered smart waste segregation system that classifies househ
 
 ---
 <img width="923" height="215" alt="Screenshot 2026-07-03 at 6 25 25 PM" src="https://github.com/user-attachments/assets/261b74d9-d4d6-4437-bbab-42519d90731f" />
----
 
 ## Features
 
