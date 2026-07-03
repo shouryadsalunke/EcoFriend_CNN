@@ -1,6 +1,3 @@
-# EcoFriend_CNN
-EcoFriend is a lightweight AI app that classifies household waste into 6 categories — cardboard, glass, metal, paper, plastic, and trash — using a custom CNN trained from scratch and deployed as a quantized TFLite model for fast, edge-friendly inference, Built with TensorFlow and Streamlit
-
 # ♻️ EcoFriend
 
 EcoFriend is an AI-powered smart waste segregation system that classifies household waste into six categories using a custom Convolutional Neural Network (CNN). Users upload an image of waste to receive an instant prediction, confidence score, and recycling/disposal guidance. The project also documents the tradeoffs between the original trained model and its TensorFlow Lite quantized version, built with efficient edge deployment (e.g. Raspberry Pi) in mind.
