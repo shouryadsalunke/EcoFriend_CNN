@@ -1,0 +1,14 @@
+{
+    "raw_model": {
+        "trainable_parameters": 675206,
+        "file_size_mb": 7.92,
+        "test_accuracy": 0.9737,
+        "average_latency_ms": 6.32
+    },
+    "quantized_model": {
+        "trainable_parameters": 675206,
+        "file_size_mb": 0.7,
+        "test_accuracy": 0.9763,
+        "average_latency_ms": 18.63
+    }
+}
