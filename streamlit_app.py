@@ -19,7 +19,7 @@ DISPOSAL_GUIDANCE = {
 
 QUANT_MODEL_PATH = "quantized_model.tflite"
 METRICS_PATH = "metrics.json"
-DASHBOARD_IMAGE_PATH = "evaluation_dashboard.png"
+DASHBOARD_IMAGE_PATH = "full_dashboard.png"
 
 st.set_page_config(page_title="EcoFriend", page_icon="♻️", layout="centered")
 
