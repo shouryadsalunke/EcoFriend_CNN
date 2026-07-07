@@ -1,125 +1,112 @@
-streamlit_code = """
-import os
 import json
-import streamlit as st
 import numpy as np
+import streamlit as st
 import tensorflow as tf
 from PIL import Image
 
-# Config & Paths
-MODEL_PATH = "../models/best_scratch_model.keras"
-METRICS_PATH = "metrics.json"
-DASHBOARD_PATH = "evaluation_dashboard.png"
-CURVE_PATH = "accuracy_curve.png"
+# Config 
+IMG_SIZE = 128
 CLASSES = ['cardboard', 'glass', 'metal', 'paper', 'plastic', 'trash']
 
-st.set_page_config(page_title="EcoFriend-CNN Smart Bin", layout="wide")
+DISPOSAL_GUIDANCE = {
+    'cardboard': "♻️ Recyclable. Flatten boxes and keep dry before placing in the recycling bin.",
+    'glass':     "♻️ Recyclable. Rinse out any residue. Check local rules for color-sorted glass.",
+    'metal':     "♻️ Recyclable. Rinse cans/tins. Aluminum and steel are both widely accepted.",
+    'paper':     "♻️ Recyclable. Keep clean and dry — greasy or food-stained paper should go to trash.",
+    'plastic':   "♻️ Recyclable (check resin code). Rinse containers and remove caps if required locally.",
+    'trash':     "🚮 Not recyclable. Dispose of in general waste.",
+}
 
-# Load model with caching so it doesn't reload on every button click
+QUANT_MODEL_PATH = "quantized_model.tflite"
+METRICS_PATH = "metrics.json"
+DASHBOARD_IMAGE_PATH = "evaluation_dashboard.png"
+
+st.set_page_config(page_title="EcoFriend", page_icon="♻️", layout="centered")
+
 @st.cache_resource
-def load_waste_model():
-    if os.path.exists(MODEL_PATH):
-        return tf.keras.models.load_model(MODEL_PATH)
-    return None
+def load_tflite_interpreter():
+    interpreter = tf.lite.Interpreter(model_path=QUANT_MODEL_PATH)
+    interpreter.allocate_tensors()
+    return interpreter
 
-model = load_waste_model()
+@st.cache_data
+def load_metrics():
+    try:
+        with open(METRICS_PATH, "r") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return None
 
-# Title banner
-st.title("EcoFriend-CNN Smart Sorting Interface")
-st.write("An Edge-Optimized Waste Classification Pipeline")
+def preprocess_image(image: Image.Image) -> np.ndarray:
+    image = image.convert("RGB").resize((IMG_SIZE, IMG_SIZE))
+    arr = np.array(image, dtype=np.float32)
+    return np.expand_dims(arr, axis=0)
 
-# Create the required tabs from your project brief
-tab1, tab2 = st.tabs(["Tab 1 (Smart Sorting)", "Tab 2 (Model Analytics)"])
+def predict_tflite(interpreter, img_array):
+    in_det = interpreter.get_input_details()
+    out_det = interpreter.get_output_details()
+    interpreter.set_tensor(in_det[0]["index"], img_array)
+    interpreter.invoke()
+    return interpreter.get_tensor(out_det[0]["index"])[0]
 
-# ==========================================
-# TAB 1: SMART SORTING & WEBCAM INTERFACE
-# ==========================================
-with tab1:
-    st.header("Real-Time Waste Classification")
-    
-    # Selection widget allowing webcam or manual upload
+st.title("♻️ EcoFriend")
+st.caption("AI-powered smart waste segregation — snap a photo or upload an image to classify it into one of six categories.")
+
+tab_classify, tab_analytics = st.tabs(["🔍 Classify Waste", "📊 Model Analytics"])
+
+with tab_classify:
+    # Radio toggle to pick camera input vs upload
     input_method = st.radio("Select Input Source:", ("Webcam Input", "Upload Image File"))
     
-    input_image = None
+    image = None
     
     if input_method == "Webcam Input":
         # Streamlit's native browser webcam component
         camera_file = st.camera_input("Hold the trash item up to your webcam camera")
         if camera_file:
-            input_image = Image.open(camera_file)
+            image = Image.open(camera_file)
     else:
-        uploaded_file = st.file_uploader("Upload an image asset...", type=["jpg", "jpeg", "png"])
-        if uploaded_file:
-            input_image = Image.open(uploaded_file)
-            st.image(input_image, caption="Target Image Source", width=350)
+        uploaded_file = st.file_uploader("Upload an image of waste", type=["jpg", "jpeg", "png"])
+        if uploaded_file is not None:
+            image = Image.open(uploaded_file)
+            st.image(image, caption="Uploaded image", use_container_width=True)
 
-    # Execution Block
-    if input_image is not None:
-        if st.button("Trigger Trash Identification"):
-            if model is None:
-                st.error("Model file not found! Please check your file paths.")
-            else:
-                with st.spinner("Processing visual features..."):
-                    # Match your exact pipeline image preprocessing requirements
-                    img = input_image.resize((128, 128))
-                    img_array = tf.keras.utils.img_to_array(img)
-                    img_array = tf.expand_dims(img_array, 0) # Create batch axis
-                    
-                    # Predict
-                    predictions = model.predict(img_array)
-                    score = tf.nn.softmax(predictions[0])
-                    predicted_class = CLASSES[np.argmax(predictions[0])]
-                    confidence = 100 * np.max(predictions[0])
-                    
-                    # Output Results
-                    st.success(f"**Analysis Result:** Item identified as **{predicted_class.upper()}** ({confidence:.2f}% confidence)")
-                    
-                    # Dummy instructions mapping based on class selection
-                    instructions = {
-                        "cardboard": "Place in blue recycling bin. Flatten boxes to save space.",
-                        "glass": "Rinse out food residue and place in glass recycling receptacle.",
-                        "metal": "Clean thoroughly. Acceptable in metal/aluminum recycling points.",
-                        "paper": "Recycle in dry paper bins. Ensure no oil staining present.",
-                        "plastic": "Verify recycling codes on container bottom. Place in plastic sorting tray.",
-                        "trash": "Non-recyclable material. Route directly to general landfill bin."
-                    }
-                    st.info(f"**Disposal Protocol:** {instructions.get(predicted_class, 'Route to standard waste sorting bin.')}")
+    if image is not None:
+        img_array = preprocess_image(image)
 
-# ==========================================
-# TAB 2: MODEL PERFORMANCE ANALYTICS
-# ==========================================
-with tab2:
-    st.header("Pipeline Evaluation & Quantization Insights")
-    
-    # Read metrics.json automatically generated from training script
-    if os.path.exists(METRICS_PATH):
-        with open(METRICS_PATH, "r") as f:
-            data = json.load(f)
-            
-        col1, col2 = st.columns(2)
-        with col1:
-            st.subheader("Raw Floating-Point Model")
-            st.metric("Test Accuracy", f"{data['raw_model']['test_accuracy']*100:.2f}%")
-            st.text(f"File Size: {data['raw_model']['file_size_mb']} MB")
-            st.text(f"Latency per Image: {data['raw_model']['average_latency_ms']} ms")
-            
-        with col2:
-            st.subheader("Quantized INT8 Model (PTQ)")
-            st.metric("Quantized Accuracy", f"{data['quantized_model']['test_accuracy']*100:.2f}%")
-            st.text(f"File Size: {data['quantized_model']['file_size_mb']} MB")
-            st.text(f"Latency per Image: {data['quantized_model']['average_latency_ms']} ms")
+        with st.spinner("Classifying..."):
+            interpreter = load_tflite_interpreter()
+            preds = predict_tflite(interpreter, img_array)
+
+        top_idx = int(np.argmax(preds))
+        top_class = CLASSES[top_idx]
+        confidence = float(preds[top_idx]) * 100
+
+        st.subheader(f"Prediction: **{top_class.capitalize()}**")
+        st.metric("Confidence", f"{confidence:.1f}%")
+        st.info(DISPOSAL_GUIDANCE[top_class])
+
+        st.write("Confidence by category:")
+        st.bar_chart({cls: float(p) for cls, p in zip(CLASSES, preds)})
+
+with tab_analytics:
+    st.subheader("Quantized Model Performance")
+
+    metrics = load_metrics()
+    if metrics:
+        quant = metrics["quantized_model"]
+
+        col1, col2, col3, col4 = st.columns(4)
+        col1.metric("Test accuracy", f"{quant['test_accuracy']*100:.2f}%")
+        col2.metric("File size", f"{quant['file_size_mb']} MB")
+        col3.metric("Avg latency", f"{quant['average_latency_ms']} ms")
+        col4.metric("Parameters", f"{quant['trainable_parameters']:,}")
     else:
-        st.warning("`metrics.json` file missing. Complete the main model execution pipeline first.")
-        
-    # Display the pre-rendered analytics plots side-by-side
-    st.subheader("Visual Analytics Performance Dashboard")
-    if os.path.exists(DASHBOARD_PATH):
-        st.image(DASHBOARD_PATH, use_container_width=True)
-    if os.path.exists(CURVE_PATH):
-        st.image(CURVE_PATH, width=800)
-"""
+        st.warning("metrics.json not found — analytics unavailable.")
 
-# Changed the output file name to 'streamlit_app.py' to prevent conflicts with your backend app.py
-with open('/kaggle/working/app/streamlit_app.py', 'w') as f:
-    f.write(streamlit_code.strip())
-print("Streamlit web app engine script written successfully to /kaggle/working/app/streamlit_app.py")
+    st.subheader("Evaluation Dashboard")
+    try:
+        # Fixed parameter from use_column_width to use_container_width to clear warning
+        st.image(DASHBOARD_IMAGE_PATH, use_container_width=True)
+    except Exception:
+        st.warning(f"{DASHBOARD_IMAGE_PATH} not found.")
